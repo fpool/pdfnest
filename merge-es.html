@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -100,21 +100,112 @@
   <h1>Combinar PDF</h1>
   <p class="sub">Unir dos o más archivos PDF en un solo documento, en el orden que elijas.</p>
   
-    <div id="drop">
+    <div id="drop" class="drop" role="button" tabindex="0" aria-label="Arrastra tus archivos aquí o haz clic para elegir">
     <div class="icon">📄</div>
     <p>Arrastra tus archivos aquí o haz clic para elegir</p>
     <div class="hint">application/pdf,.pdf</div>
     <input type="file" id="file" multiple accept="application/pdf,.pdf" style="display:none">
   </div>
   <div class="filelist" id="filelist"></div>
-  <button class="btn" id="go" disabled>Process</button>
+  <button class="btn" id="go" disabled>Procesar</button>
   <div class="status" id="status"></div>
-  <div class="dl" id="dlbox"><a id="dllink" href="#">Descargar</a> <a id="dlzip" href="#" style="display:none">Descargar todo en ZIP</a></div>
-  <div class="privacy-note">🔒 <b>100% private:</b> everything runs locally in your browser. Your files are never uploaded to any server.</div>
-  <h2>FAQ</h2>
+  <div class="dl" id="dlbox"><a id="dllink" href="#">Descargar</a></div>
+  <div class="privacy-note">🔒 <b>100 % privado:</b> todo se ejecuta localmente en tu navegador. Tus archivos nunca se suben a ningún servidor.</div>
+  <h2>Preguntas frecuentes</h2>
   <p><b>¿De verdad es privado?</b> Sí — la combinación se ejecuta en JavaScript dentro de tu navegador. Tus archivos nunca se suben.</p><p><b>¿Cuántos archivos puedo combinar?</b> Prácticamente ilimitados — solo lo limita la memoria de tu dispositivo.</p><p><b>¿Se mantiene la calidad?</b> Sí — las páginas se copian sin recomprimir: texto y calidad intactos.</p>
   <script>
-const TRW = {drop: {"Arrastra tus archivos aquí o haz clic para elegir"}, processing: {"Procesando …"}, done: {"¡Listo!"}, dl: {"Descargar"}, dlzip: {"Descargar todo en ZIP"}, no_files: {"Primero elige algunos archivos."}};
+
+let CHSEN = [];
+const dropEl = document.getElementById('drop');
+const fileEl = document.getElementById('file');
+const listEl = document.getElementById('filelist');
+const goEl = document.getElementById('go');
+fileEl.addEventListener('change', function () { setFiles([...fileEl.files]); });
+dropEl.addEventListener('click', function () { fileEl.click(); });
+dropEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileEl.click(); }
+});
+dropEl.addEventListener('dragover', function (e) { e.preventDefault(); dropEl.classList.add('over'); });
+dropEl.addEventListener('dragleave', function () { dropEl.classList.remove('over'); });
+dropEl.addEventListener('drop', function (e) {
+  e.preventDefault(); dropEl.classList.remove('over');
+  if (e.dataTransfer.files.length) setFiles([...e.dataTransfer.files]);
+});
+function setFiles(fs) {
+  const good = fs.filter(extOk);
+  if (good.length !== fs.length) setStatus(TRW.bad_type);
+  CHSEN = good;
+  listEl.innerHTML = CHSEN.map(function (f) {
+    return '<div>' + f.name + ' — ' + Math.max(1, Math.round(f.size / 1024)) + ' KB</div>';
+  }).join('');
+  goEl.disabled = CHSEN.length === 0;
+}
+goEl.addEventListener('click', async function () {
+  if (!CHSEN.length) return setStatus(TRW.no_files);
+  goEl.disabled = true;
+  setStatus(TRW.processing);
+  try {
+    await libsReady();
+    await processFiles();
+  } catch (err) {
+    if (window.console) console.error(err);
+    setStatus(TRW.error + ': ' + ((err && err.message) || err));
+  } finally {
+    goEl.disabled = false;
+  }
+});
+
+const TRW = {drop: "Arrastra tus archivos aquí o haz clic para elegir", processing: "Procesando …", done: "¡Listo!", dl: "Descargar", no_files: "Primero elige algunos archivos.", error: "Error", bad_type: "Tipo de archivo no compatible."};
+
+function setStatus(t) { document.getElementById('status').textContent = t; }
+function parseRanges(str, max) {
+  if (!str || !str.trim()) return Array.from({length: max}, function(_, i){ return i + 1; });
+  const out = [];
+  str.split(',').forEach(function (part) {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?$/);
+    if (m) { let a = +m[1], b = m[2] ? +m[2] : a;
+      for (let i = a; i <= b; i++) if (i >= 1 && i <= max && out.indexOf(i) < 0) out.push(i); }
+  });
+  return out.sort(function (x, y) { return x - y; });
+}
+function setupWorker() {
+  if (window.pdfjsLib && !window.__PW__) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.js';
+    window.__PW__ = true;
+  }
+}
+const F$ = function (v) { return Number(v).toLocaleString('en-US'); };
+let LAST_URL = '';
+function downloadBlob(blob, name) {
+  if (LAST_URL) URL.revokeObjectURL(LAST_URL);
+  LAST_URL = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = LAST_URL; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function showDl(name) {
+  if (!LAST_URL) return;
+  const box = document.getElementById('dlbox');
+  const link = document.getElementById('dllink');
+  link.textContent = TRW.dl;
+  link.href = LAST_URL; link.download = name;
+  box.style.display = 'block';
+}
+function libsReady() {
+  return new Promise(function (res) {
+    if (document.readyState === 'complete') return res();
+    window.addEventListener('load', res, { once: true });
+  });
+}
+function extOk(f) {
+  const acc = fileEl.accept || '';
+  const exts = acc.split(',').map(function (a) { return a.trim().toLowerCase(); })
+    .filter(function (a) { return a.charAt(0) === '.'; });
+  if (!exts.length) return true;
+  const n = f.name.toLowerCase();
+  return exts.some(function (e) { return n.slice(-e.length) === e; });
+}
+
 
 async function processFiles() {
   if (!CHSEN.length) return setStatus(TRW.no_files);

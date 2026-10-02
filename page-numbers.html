@@ -100,7 +100,7 @@
   <h1>Add Page Numbers</h1>
   <p class="sub">Add page numbers to a PDF — position and starting number freely selectable.</p>
     <div class="field"><label>Starting number</label><input type="number" id="start" value="1" min="0"></div>
-    <div id="drop">
+    <div id="drop" class="drop" role="button" tabindex="0" aria-label="Drop files here or click to choose">
     <div class="icon">📄</div>
     <p>Drop files here or click to choose</p>
     <div class="hint">application/pdf,.pdf</div>
@@ -109,12 +109,103 @@
   <div class="filelist" id="filelist"></div>
   <button class="btn" id="go" disabled>Process</button>
   <div class="status" id="status"></div>
-  <div class="dl" id="dlbox"><a id="dllink" href="#">Download</a> <a id="dlzip" href="#" style="display:none">Download all as ZIP</a></div>
+  <div class="dl" id="dlbox"><a id="dllink" href="#">Download</a></div>
   <div class="privacy-note">🔒 <b>100% private:</b> everything runs locally in your browser. Your files are never uploaded to any server.</div>
   <h2>FAQ</h2>
   <p><b>Can I start at a different number?</b> Yes — the starting number is free, e.g. 1 on a cover page that stays unnumbered.</p><p><b>Where does the number appear?</b> By default bottom center of every page.</p><p><b>Is the rest unchanged?</b> Yes — only the numbers are added, content and layout stay intact.</p>
   <script>
-const TRW = {drop: {"Drop files here or click to choose"}, processing: {"Processing …"}, done: {"Done!"}, dl: {"Download"}, dlzip: {"Download all as ZIP"}, no_files: {"Please choose files first."}};
+
+let CHSEN = [];
+const dropEl = document.getElementById('drop');
+const fileEl = document.getElementById('file');
+const listEl = document.getElementById('filelist');
+const goEl = document.getElementById('go');
+fileEl.addEventListener('change', function () { setFiles([...fileEl.files]); });
+dropEl.addEventListener('click', function () { fileEl.click(); });
+dropEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileEl.click(); }
+});
+dropEl.addEventListener('dragover', function (e) { e.preventDefault(); dropEl.classList.add('over'); });
+dropEl.addEventListener('dragleave', function () { dropEl.classList.remove('over'); });
+dropEl.addEventListener('drop', function (e) {
+  e.preventDefault(); dropEl.classList.remove('over');
+  if (e.dataTransfer.files.length) setFiles([...e.dataTransfer.files]);
+});
+function setFiles(fs) {
+  const good = fs.filter(extOk);
+  if (good.length !== fs.length) setStatus(TRW.bad_type);
+  CHSEN = good;
+  listEl.innerHTML = CHSEN.map(function (f) {
+    return '<div>' + f.name + ' — ' + Math.max(1, Math.round(f.size / 1024)) + ' KB</div>';
+  }).join('');
+  goEl.disabled = CHSEN.length === 0;
+}
+goEl.addEventListener('click', async function () {
+  if (!CHSEN.length) return setStatus(TRW.no_files);
+  goEl.disabled = true;
+  setStatus(TRW.processing);
+  try {
+    await libsReady();
+    await processFiles();
+  } catch (err) {
+    if (window.console) console.error(err);
+    setStatus(TRW.error + ': ' + ((err && err.message) || err));
+  } finally {
+    goEl.disabled = false;
+  }
+});
+
+const TRW = {drop: "Drop files here or click to choose", processing: "Processing …", done: "Done!", dl: "Download", no_files: "Please choose files first.", error: "Error", bad_type: "Unsupported file type."};
+
+function setStatus(t) { document.getElementById('status').textContent = t; }
+function parseRanges(str, max) {
+  if (!str || !str.trim()) return Array.from({length: max}, function(_, i){ return i + 1; });
+  const out = [];
+  str.split(',').forEach(function (part) {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?$/);
+    if (m) { let a = +m[1], b = m[2] ? +m[2] : a;
+      for (let i = a; i <= b; i++) if (i >= 1 && i <= max && out.indexOf(i) < 0) out.push(i); }
+  });
+  return out.sort(function (x, y) { return x - y; });
+}
+function setupWorker() {
+  if (window.pdfjsLib && !window.__PW__) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.js';
+    window.__PW__ = true;
+  }
+}
+const F$ = function (v) { return Number(v).toLocaleString('en-US'); };
+let LAST_URL = '';
+function downloadBlob(blob, name) {
+  if (LAST_URL) URL.revokeObjectURL(LAST_URL);
+  LAST_URL = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = LAST_URL; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function showDl(name) {
+  if (!LAST_URL) return;
+  const box = document.getElementById('dlbox');
+  const link = document.getElementById('dllink');
+  link.textContent = TRW.dl;
+  link.href = LAST_URL; link.download = name;
+  box.style.display = 'block';
+}
+function libsReady() {
+  return new Promise(function (res) {
+    if (document.readyState === 'complete') return res();
+    window.addEventListener('load', res, { once: true });
+  });
+}
+function extOk(f) {
+  const acc = fileEl.accept || '';
+  const exts = acc.split(',').map(function (a) { return a.trim().toLowerCase(); })
+    .filter(function (a) { return a.charAt(0) === '.'; });
+  if (!exts.length) return true;
+  const n = f.name.toLowerCase();
+  return exts.some(function (e) { return n.slice(-e.length) === e; });
+}
+
 
 async function processFiles() {
   if (!CHSEN.length) return setStatus(TRW.no_files);

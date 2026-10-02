@@ -9,6 +9,9 @@ TR = {
  "processing":"Verarbeitung läuft …","done":"Fertig!","download":"Herunterladen","download_zip":"Alle als ZIP herunterladen",
  "no_files":"Bitte zuerst Dateien auswählen.","pages_lbl":"Seiten (leer = alle), z. B. 1-3,5",
  "angle_lbl":"Drehwinkel","start_lbl":"Startnummer",
+ "btn":"Verarbeiten","error":"Fehler","bad_type":"Nicht unterstützter Dateityp.",
+ "faq_title":"FAQ",
+ "privacy_note":"<b>100 % privat:</b> alles läuft lokal in Ihrem Browser. Ihre Dateien werden nie auf einen Server hochgeladen.",
  "privacy":{"title":"Datenschutzerklärung | PdfNest","meta":"Datenschutzerklärung von PdfNest — lokale PDF-Verarbeitung, Cookies und Werbung.",
    "body":"""
   <h1>Datenschutzerklärung</h1>
@@ -92,6 +95,9 @@ TR = {
  "processing":"Traitement en cours …","done":"Terminé !","download":"Télécharger","download_zip":"Tout télécharger en ZIP",
  "no_files":"Choisissez d'abord des fichiers.","pages_lbl":"Pages (vide = toutes), ex. 1-3,5",
  "angle_lbl":"Angle de rotation","start_lbl":"Numéro de départ",
+ "btn":"Traiter","error":"Erreur","bad_type":"Type de fichier non pris en charge.",
+ "faq_title":"FAQ",
+ "privacy_note":"<b>100 % privé :</b> tout s'exécute localement dans votre navigateur. Vos fichiers ne sont jamais envoyés à un serveur.",
  "privacy":{"title":"Politique de confidentialité | PdfNest","meta":"Politique de confidentialité de PdfNest — traitement local des PDF, cookies et publicité.",
    "body":"""
   <h1>Politique de confidentialité</h1>
@@ -175,6 +181,9 @@ TR = {
  "processing":"Procesando …","done":"¡Listo!","download":"Descargar","download_zip":"Descargar todo en ZIP",
  "no_files":"Primero elige algunos archivos.","pages_lbl":"Páginas (vacío = todas), ej. 1-3,5",
  "angle_lbl":"Ángulo de rotación","start_lbl":"Número inicial",
+ "btn":"Procesar","error":"Error","bad_type":"Tipo de archivo no compatible.",
+ "faq_title":"Preguntas frecuentes",
+ "privacy_note":"<b>100 % privado:</b> todo se ejecuta localmente en tu navegador. Tus archivos nunca se suben a ningún servidor.",
  "privacy":{"title":"Política de privacidad | PdfNest","meta":"Política de privacidad de PdfNest — procesamiento local de PDF, cookies y publicidad.",
    "body":"""
   <h1>Política de privacidad</h1>

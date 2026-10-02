@@ -101,7 +101,7 @@ CSS = """
 """
 
 HEAD = """<!DOCTYPE html>
-<html lang="en">
+<html lang="__LANG__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -162,10 +162,6 @@ if (langBox) {
 # ---------------- 工具定义(英文基准;JS 中 out/UI 标签 key 化) ----------------
 TOOL_JS_HELPERS = """
 function setStatus(t) { document.getElementById('status').textContent = t; }
-function downloadBlob(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
-}
 function parseRanges(str, max) {
   if (!str || !str.trim()) return Array.from({length: max}, function(_, i){ return i + 1; });
   const out = [];
@@ -183,6 +179,78 @@ function setupWorker() {
   }
 }
 const F$ = function (v) { return Number(v).toLocaleString('en-US'); };
+let LAST_URL = '';
+function downloadBlob(blob, name) {
+  if (LAST_URL) URL.revokeObjectURL(LAST_URL);
+  LAST_URL = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = LAST_URL; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function showDl(name) {
+  if (!LAST_URL) return;
+  const box = document.getElementById('dlbox');
+  const link = document.getElementById('dllink');
+  link.textContent = TRW.dl;
+  link.href = LAST_URL; link.download = name;
+  box.style.display = 'block';
+}
+function libsReady() {
+  return new Promise(function (res) {
+    if (document.readyState === 'complete') return res();
+    window.addEventListener('load', res, { once: true });
+  });
+}
+function extOk(f) {
+  const acc = fileEl.accept || '';
+  const exts = acc.split(',').map(function (a) { return a.trim().toLowerCase(); })
+    .filter(function (a) { return a.charAt(0) === '.'; });
+  if (!exts.length) return true;
+  const n = f.name.toLowerCase();
+  return exts.some(function (e) { return n.slice(-e.length) === e; });
+}
+"""
+
+BOOT_JS = """
+let CHSEN = [];
+const dropEl = document.getElementById('drop');
+const fileEl = document.getElementById('file');
+const listEl = document.getElementById('filelist');
+const goEl = document.getElementById('go');
+fileEl.addEventListener('change', function () { setFiles([...fileEl.files]); });
+dropEl.addEventListener('click', function () { fileEl.click(); });
+dropEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileEl.click(); }
+});
+dropEl.addEventListener('dragover', function (e) { e.preventDefault(); dropEl.classList.add('over'); });
+dropEl.addEventListener('dragleave', function () { dropEl.classList.remove('over'); });
+dropEl.addEventListener('drop', function (e) {
+  e.preventDefault(); dropEl.classList.remove('over');
+  if (e.dataTransfer.files.length) setFiles([...e.dataTransfer.files]);
+});
+function setFiles(fs) {
+  const good = fs.filter(extOk);
+  if (good.length !== fs.length) setStatus(TRW.bad_type);
+  CHSEN = good;
+  listEl.innerHTML = CHSEN.map(function (f) {
+    return '<div>' + f.name + ' \u2014 ' + Math.max(1, Math.round(f.size / 1024)) + ' KB</div>';
+  }).join('');
+  goEl.disabled = CHSEN.length === 0;
+}
+goEl.addEventListener('click', async function () {
+  if (!CHSEN.length) return setStatus(TRW.no_files);
+  goEl.disabled = true;
+  setStatus(TRW.processing);
+  try {
+    await libsReady();
+    await processFiles();
+  } catch (err) {
+    if (window.console) console.error(err);
+    setStatus(TRW.error + ': ' + ((err && err.message) || err));
+  } finally {
+    goEl.disabled = false;
+  }
+});
 """
 
 TOOLS = [
@@ -265,6 +333,10 @@ dict(slug="page-numbers", nav="Page numbers", multi=False, accept="application/p
 def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+def site_url(base, lang):
+    return BASE_URL + ("/" if (base == "index" and lang == "en")
+                      else "/" + page_file(base, lang).replace(".html", ""))
+
 def page_file(base, lang):
     return (base + ".html") if lang == "en" else (base + "-" + lang + ".html")
 
@@ -280,7 +352,7 @@ def lang_switcher(cur, base):
 
 def render(lang, base, title, meta, body, cur, ld_faq=None, ld_name="PdfNest"):
     tr = TR.get(lang) or {}
-    url = BASE_URL + ("/" if base == "index" else "/" + page_file(base, lang).replace(".html", ""))
+    url = site_url(base, lang)
     ld_w = LD_WEBAPP_T.replace("__NAME__", ld_name).replace("__URL__", url).replace("__META__", meta)
     ent = ""
     if ld_faq:
@@ -289,7 +361,8 @@ def render(lang, base, title, meta, body, cur, ld_faq=None, ld_name="PdfNest"):
     hreflangs = "\n".join(
         '  <link rel="alternate" hreflang="' + c + '" href="' + BASE_URL + '/' + page_file(base, c).replace(".html", "") + '">'
         for c in LANGS) + '\n  <link rel="alternate" hreflang="x-default" href="' + BASE_URL + '/' + page_file(base, "en").replace(".html", "") + '">'
-    html = (HEAD.replace("__TITLE__", title).replace("__META__", meta)
+    html = (HEAD.replace("__LANG__", lang)
+            .replace("__TITLE__", title).replace("__META__", meta)
             .replace("__URL__", url).replace("__CSS__", CSS)
             .replace("__HREFLANGS__", hreflangs)
             .replace("__LD_WEBAPP__", ld_w).replace("__LD_FAQ__", ent)
@@ -322,8 +395,11 @@ def tool_page(lang, tool):
     processing = tr.get("processing", "Processing …")
     done = tr.get("done", "Done!")
     dl = tr.get("download", "Download")
-    dlzip = tr.get("download_zip", "Download all as ZIP")
     no_files = tr.get("no_files", "Please choose files first.")
+    error = tr.get("error", "Error")
+    bad_type = tr.get("bad_type", "Unsupported file type.")
+    note = tr.get("privacy_note", "<b>100% private:</b> everything runs locally in your browser. Your files are never uploaded to any server.")
+    faq_h = tr.get("faq_title", "FAQ")
     body = f"""
   <h1>{esc(h1)}</h1>
   <p class="sub">{esc(intro)}</p>
@@ -331,21 +407,25 @@ def tool_page(lang, tool):
   {drop_html(tool["multi"], tool["accept"])}
   <button class="btn" id="go" disabled>{esc(btn)}</button>
   <div class="status" id="status"></div>
-  <div class="dl" id="dlbox"><a id="dllink" href="#">{esc(dl)}</a> <a id="dlzip" href="#" style="display:none">{esc(dlzip)}</a></div>
-  <div class="privacy-note">🔒 <b>100% private:</b> everything runs locally in your browser. Your files are never uploaded to any server.</div>
-  <h2>FAQ</h2>
+  <div class="dl" id="dlbox"><a id="dllink" href="#">{esc(dl)}</a></div>
+  <div class="privacy-note">🔒 {note}</div>
+  <h2>{esc(faq_h)}</h2>
   {"".join('<p><b>' + esc(q) + '</b> ' + esc(a) + '</p>' for q, a in faq)}
   <script>
-const TRW = {{drop: {{__J_DROP__}}, processing: {{__J_PROC__}}, done: {{__J_DONE__}}, dl: {{__J_DL__}}, dlzip: {{__J_DLZIP__}}, no_files: {{__J_NOFILES__}}}};
+__BOOT_JS__
+const TRW = {{drop: __J_DROP__, processing: __J_PROC__, done: __J_DONE__, dl: __J_DL__, no_files: __J_NOFILES__, error: __J_ERR__, bad_type: __J_BAD__}};
+__HELPERS__
 __TOOL_JS__
 </script>
 """
     body = body.replace("__DROP__", esc(drop))
+    body = body.replace("__BOOT_JS__", BOOT_JS).replace("__HELPERS__", TOOL_JS_HELPERS)
     body = (body.replace("__J_DROP__", '"' + esc(drop) + '"')
                 .replace("__J_PROC__", '"' + esc(processing) + '"')
                 .replace("__J_DONE__", '"' + esc(done) + '"')
                 .replace("__J_DL__", '"' + esc(dl) + '"')
-                .replace("__J_DLZIP__", '"' + esc(dlzip) + '"')
+                .replace("__J_ERR__", '"' + esc(error) + '"')
+                .replace("__J_BAD__", '"' + esc(bad_type) + '"')
                 .replace("__J_NOFILES__", '"' + esc(no_files) + '"')
                 .replace("__TOOL_JS__", tool["tool_js"]))
     return render(lang, tool["slug"], title, meta, body, tool["slug"],
@@ -353,7 +433,7 @@ __TOOL_JS__
 
 def drop_html(multi, accept):
     m = "multiple" if multi else ""
-    return f"""  <div id="drop">
+    return f"""  <div id="drop" class="drop" role="button" tabindex="0" aria-label="__DROP__">
     <div class="icon">📄</div>
     <p>__DROP__</p>
     <div class="hint">{accept}</div>
@@ -501,47 +581,6 @@ for t in TOOLS:
     t["tool_js"] = TOOL_JS[t["slug"]]
 
 # ---------------- 生成循环 ----------------
-def esc(s):
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-def page_file(base, lang):
-    return (base + ".html") if lang == "en" else (base + "-" + lang + ".html")
-
-def lang_switcher(cur, base):
-    hf = lambda c: page_file(base, c)
-    items = "".join(
-        '<a href="' + hf(c) + ('" class="cur"' if c == cur else '"') + '>'
-        + (TR.get(c) or {}).get("name", "English") + '</a>' for c in LANGS)
-    btn = ('<button id="langBtn" aria-haspopup="true" aria-expanded="false">'
-           + (TR.get(cur) or {}).get("name", "English")
-           + '<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>')
-    return '<div class="lang">' + btn + '<div class="lang-menu">' + items + '</div></div>'
-
-def render(lang, base, title, meta, body, cur, ld_faq=None, ld_name="PdfNest"):
-    tr = TR.get(lang) or {}
-    url = BASE_URL + ("/" if base == "index" else "/" + page_file(base, lang).replace(".html", ""))
-    ld_w = LD_WEBAPP_T.replace("__NAME__", ld_name).replace("__URL__", url).replace("__META__", meta)
-    ent = ""
-    if ld_faq:
-        ents = ",".join('{"@type":"Question","name":"' + esc(q).replace('"', '\\"') + '","acceptedAnswer":{"@type":"Answer","text":"' + esc(a).replace('"', '\\"') + '"}}' for q, a in ld_faq)
-        ent = LD_FAQ_T.replace("__ENTITIES__", ents)
-    hreflangs = "\n".join(
-        '  <link rel="alternate" hreflang="' + c + '" href="' + BASE_URL + '/' + page_file(base, c).replace(".html", "") + '">'
-        for c in LANGS) + '\n  <link rel="alternate" hreflang="x-default" href="' + BASE_URL + '/' + page_file(base, "en").replace(".html", "") + '">'
-    html = (HEAD.replace("__TITLE__", title).replace("__META__", meta)
-            .replace("__URL__", url).replace("__CSS__", CSS)
-            .replace("__HREFLANGS__", hreflangs)
-            .replace("__LD_WEBAPP__", ld_w).replace("__LD_FAQ__", ent)
-            .replace("__NAV_PRIVACY__", tr.get("nav_privacy", "Privacy"))
-            .replace("__NAV_ABOUT__", tr.get("nav_about", "About"))
-            .replace("__LANGSWITCH__", lang_switcher(lang, base))
-            .replace("__HOME_HREF__", "/" if lang == "en" else "/index-" + lang)
-            .replace("__PRIVACY_HREF__", "/privacy.html" if lang == "en" else "/privacy-" + lang + ".html")
-            .replace("__ABOUT_HREF__", "/about.html" if lang == "en" else "/about-" + lang + ".html")
-            .replace("__MAIN__", body)
-            .replace("__FOOTER__", FOOTERS.get(lang, FOOTERS["en"])))
-    return html
-
 FOOTERS = {
  "en": "PdfNest — free private PDF tools. Files never leave your browser. © 2026",
  "de": "PdfNest — kostenlose private PDF-Werkzeuge. Dateien verlassen nie Ihren Browser. © 2026",
@@ -619,7 +658,7 @@ for lang in LANGS:
 lines = ['<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
 for lang in LANGS:
     for base in ["index", *[t["slug"] for t in TOOLS], "privacy", "about"]:
-        loc = BASE_URL + ("/" if base == "index" else "/" + page_file(base, lang).replace(".html", ""))
+        loc = site_url(base, lang)
         lines.append("  <url><loc>" + loc + "</loc></url>")
 lines.append("</urlset>")
 Path("sitemap.xml").write_text("\n".join(lines) + "\n", encoding="utf-8")
