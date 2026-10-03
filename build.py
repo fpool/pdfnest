@@ -115,6 +115,7 @@ HEAD = """<!DOCTYPE html>
 <meta property="og:description" content="__META__">
 <meta property="og:url" content="__URL__">
 <meta name="twitter:card" content="summary">
+<meta name="google-site-verification" content="ry-cMVGejQMSXohQO6vkAau4Hlj9PuhunhbKBAjhP1c" />
 __HREFLANGS__
 <script type="application/ld+json">__LD_WEBAPP__</script>
 __LD_FAQ__
