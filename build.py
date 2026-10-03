@@ -357,7 +357,7 @@ def render(lang, base, title, meta, body, cur, ld_faq=None, ld_name="PdfNest"):
     ent = ""
     if ld_faq:
         ents = ",".join('{"@type":"Question","name":"' + esc(q).replace('"', '\\"') + '","acceptedAnswer":{"@type":"Answer","text":"' + esc(a).replace('"', '\\"') + '"}}' for q, a in ld_faq)
-        ent = LD_FAQ_T.replace("__ENTITIES__", ents)
+        ent = '<script type="application/ld+json">' + LD_FAQ_T.replace("__ENTITIES__", ents) + "</script>"
     hreflangs = "\n".join(
         '  <link rel="alternate" hreflang="' + c + '" href="' + BASE_URL + '/' + page_file(base, c).replace(".html", "") + '">'
         for c in LANGS) + '\n  <link rel="alternate" hreflang="x-default" href="' + BASE_URL + '/' + page_file(base, "en").replace(".html", "") + '">'
