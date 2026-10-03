@@ -7,7 +7,7 @@ from pathlib import Path
 from i18n import TR
 
 sys.stdout.reconfigure(encoding="utf-8")
-BASE_URL = "https://pdfnest.pages.dev"
+BASE_URL = "https://pdfnest-aa9.pages.dev"
 LANGS = ["en", "de", "fr", "es"]
 
 HOME_TRI = {
